@@ -21,12 +21,24 @@ train_data = CelebaDataset(
     '/tmp2/liu115/img_align_celeba',
     custom_transform
 )
+test_data = CelebaDataset(
+    '/tmp2/liu115/Anno/identity_CelebA.txt',
+    '/tmp2/liu115/img_align_celeba',
+    custom_transform,
+    training=False
+)
 
 train_loader = DataLoader(
     dataset=train_data,
     batch_size=BATCH_SIZE,
     shuffle=True,
     num_workers=2
+)
+test_loader = DataLoader(
+    dataset=test_data,
+    batch_size=1,
+    shuffle=True,
+    num_workers=1
 )
 
 
@@ -38,40 +50,78 @@ optimizer = torch.optim.Adam(
 )
 #criterion = torch.nn.MSELoss()
 
-if not os.path.exists(OUTPUT_DIR):
-    os.makedirs(OUTPUT_DIR)
 
-start_time = time.time()
-for epoch in range(num_epochs):
-    for batch_idx, (anchor_img, pos_img, neg_img) in enumerate(train_loader):
-        
-        anchor_img = anchor_img.cuda()
-        pos_img = pos_img.cuda()
-        neg_img = neg_img.cuda()
+def test():
 
-        anchor_output = model(anchor_img)
-        pos_output = model(pos_img)
-        neg_output = model(neg_img)
-        loss = triplet_loss(anchor_output, pos_output, neg_output)
-        # loss = criterion(output, img)
-        
-        optimizer.zero_grad()
-        loss.backward()
-        optimizer.step()
-
-        if (batch_idx + 1) % 50 == 0:
-            took = time.time() - start_time
-            print('epoch [{}/{}], loss:{:.4f}, took: {:.1f}s'.format(epoch, num_epochs, loss.item(), took))
-            start_time = time.time()
-
-    torch.save({
-        'epoch': epoch + 1,
-        'state_dict': model.state_dict(),
-        'optimizer': optimizer.state_dict(),
-    },
-        os.path.join(OUTPUT_DIR, 'checkpoint_{}.pth'.format(epoch))
-    )
     
+    embeddings = []
+    for batch_idx, imgs in enumerate(test_loader):
+        imgs = imgs.cuda()
+        output = model(imgs)
+        embeddings.append(output.detach().cpu())
+    
+    # Calc average intra-class distance
+    intra_class_dist = 0
+    num_pairs = 0
+    for idx, embedding in enumerate(embeddings):
+        num_imgs = embedding.shape[0]
+        for i in range(num_imgs):
+            for j in range(i+1, num_imgs):
+                intra_class_dist += np.linalg.norm(embedding[i] - embedding[j])
+                num_pairs += 1
+    intra_class_dist /= (1. * num_pairs)
+    
+    # Calc average inter-class distance
+    inter_class_dist = 0
+    num_pairs = 0
+    num_samples = 20
+    sample_embeddings = random.sample(embeddings, num_samples)
+
+    for i in range(num_samples):
+        for j in range(i+1, num_samples):
+            ix = random.randrange(sample_embeddings[i].shape[0])
+            jx = random.randrange(sample_embeddings[j].shape[0])
+
+            inter_class_dist += np.linalg.norm(sample_embeddings[i][ix] - smaple_embeddings[j][jx])
+            num_pairs += 1
+    inter_class_dist /= (1. * num_pairs)
+
+
+def train():
+    if not os.path.exists(OUTPUT_DIR):
+        os.makedirs(OUTPUT_DIR)
+
+    start_time = time.time()
+    for epoch in range(num_epochs):
+        for batch_idx, (anchor_img, pos_img, neg_img) in enumerate(train_loader):
+            
+            anchor_img = anchor_img.cuda()
+            pos_img = pos_img.cuda()
+            neg_img = neg_img.cuda()
+
+            anchor_output = model(anchor_img)
+            pos_output = model(pos_img)
+            neg_output = model(neg_img)
+            loss = triplet_loss(anchor_output, pos_output, neg_output)
+            # loss = criterion(output, img)
+            
+            optimizer.zero_grad()
+            loss.backward()
+            optimizer.step()
+
+            if (batch_idx + 1) % 50 == 0:
+                took = time.time() - start_time
+                print('epoch [{}/{}], loss:{:.4f}, took: {:.1f}s'.format(epoch, num_epochs, loss.item(), took))
+                start_time = time.time()
+
+        torch.save({
+            'epoch': epoch + 1,
+            'state_dict': model.state_dict(),
+            'optimizer': optimizer.state_dict(),
+        },
+            os.path.join(OUTPUT_DIR, 'checkpoint_{}.pth'.format(epoch))
+        )
+        
     #for i in range (10):
     #    img = output[i].permute(1, 2, 0)
     #    plt.imshow(img.detach().cpu())

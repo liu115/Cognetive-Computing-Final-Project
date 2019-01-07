@@ -31,8 +31,18 @@ class FruitDataset(Dataset):
     def __len__(self):
         return len(self.img_paths)
 
+def sep_celeba_train_val():
+    txt_path = '/tmp2/liu115/Anno/identity_CelebA.txt'
+    df = pd.read_csv(txt_path, sep=' ', names=['path', 'id'], dtype={'path': str, 'id': np.int32})
+
+    num_train = int(df.shape[0] * 0.8)
+    df_train = df.iloc[:num_train, :]
+    df_test = df.iloc[num_train:, :]
+
+    def_train.to_csv('/tmp2/liu115/Anno/identity_CelebA_train.txt', sep=" ")
+
 class CelebaDataset(Dataset):
-    def __init__(self, txt_path, img_dir, transform=None):
+    def __init__(self, txt_path, img_dir, transform=None, training=True):
         df = pd.read_csv(txt_path, sep=' ', names=['path', 'id'], dtype={'path': str, 'id': np.int32})
 
         self.img_dir = img_dir
@@ -40,6 +50,7 @@ class CelebaDataset(Dataset):
         self.transform = transform
         self.img_ids = df['id'].values
         self.img_names = df['path'].values
+        self.training = training
 
         self.id_dict = {}
         for i, img_id in enumerate(self.img_ids):
@@ -57,6 +68,12 @@ class CelebaDataset(Dataset):
         assert len(self.id_dict) > 2
 
         self.id_dict = list(self.id_dict.values())
+        
+        num_training = len(self.id_dict) * 8 // 10
+        if self.training:
+            self.id_dict = self.id_dict[:num_training]
+        else:
+            self.id_dict = self.id_dict[num_training:]
 
     def read_img(self, name):
         img = Image.open(os.path.join(self.img_dir, name))
@@ -66,17 +83,20 @@ class CelebaDataset(Dataset):
 
     def __getitem__(self, index):
         # Sample anchor, positive, and negative samples
-
-        sample_size = len(self.id_dict[index])
-        assert sample_size > 1
-        anchor, positive = random.choices(self.id_dict[index], k=2)
-
-        neg_index = random.randrange(self.__len__())
-        while neg_index == index:
-            neg_index = random.randrange(self.__len__())
-        negative = random.choice(self.id_dict[neg_index])
         
-        return self.read_img(anchor), self.read_img(positive), self.read_img(negative)
+        if self.training:
+            sample_size = len(self.id_dict[index])
+            # assert sample_size > 1
+            anchor, positive = random.choices(self.id_dict[index], k=2)
+
+            neg_index = random.randrange(self.__len__())
+            while neg_index == index:
+                neg_index = random.randrange(self.__len__())
+            negative = random.choice(self.id_dict[neg_index])
+            
+            return self.read_img(anchor), self.read_img(positive), self.read_img(negative)
+        else:
+            return [self.read_img(img) for img in self.id_dict[index]]
 
     def __len__(self):
         return len(self.id_dict)
@@ -85,12 +105,24 @@ custom_transform = transforms.Compose([transforms.ToTensor()])
 train_dataset = CelebaDataset(
     '/tmp2/liu115/Anno/identity_CelebA.txt',
     '/tmp2/liu115/img_align_celeba',
-    custom_transform
+    custom_transform,
+    training=True
 )
-a, b, c = train_dataset.__getitem__(0)
-a = a.permute(1, 2, 0)
-b = b.permute(1, 2, 0)
-c = c.permute(1, 2, 0)
+test_dataset = CelebaDataset(
+    '/tmp2/liu115/Anno/identity_CelebA.txt',
+    '/tmp2/liu115/img_align_celeba',
+    custom_transform,
+    training=False
+)
+print(len(train_dataset))
+print(len(test_dataset))
+
+a = test_dataset.__getitem__(0)
+print(len(a))
+print(torch.stack(a).size())
+# a = a.permute(1, 2, 0)
+# b = b.permute(1, 2, 0)
+# c = c.permute(1, 2, 0)
 
 
 train_loader = DataLoader(
