@@ -6,39 +6,83 @@ import numpy as np
 import os
 
 class AutoEncoder(nn.Module):
-    def __init__(self):
+    def __init__(self, fc_dims=256, face_size=(128, 128), target_size=(128, 128), output_size=(128, 128)):
         super(AutoEncoder, self).__init__()
+        self.fc_dims = fc_dims
+        self.face_size = face_size
+        self.target_size = target_size
+        self.output_size = output_size
 
         self.face_encoder = nn.Sequential(
-            nn.Conv2d(3, 16, 3, stride=1, padding=1),
+            nn.Conv2d(3, 64, 4, stride=2, padding=1),
+            nn.BatchNorm2d(64),
             nn.ReLU(True),
-            nn.MaxPool2d(2, stride=2),
-            nn.Conv2d(16, 32, 3, stride=1, padding=1),
+            nn.Conv2d(64, 128, 4, stride=2, padding=1),
+            nn.BatchNorm2d(128),
             nn.ReLU(True),
-            nn.MaxPool2d(2, stride=2)
+            nn.Conv2d(128, 128, 4, stride=2, padding=1),
+            nn.BatchNorm2d(128),
+            nn.ReLU(True),
+            nn.Conv2d(128, 256, 4, stride=2, padding=1),
+            nn.BatchNorm2d(256),
+            nn.ReLU(True),
+        )
+
+        self.face_fc = nn.Sequential(
+            nn.Linear(self.face_size[0] * self.face_size[1] // 256 * 256, self.fc_dims)
         )
 
         self.target_encoder = nn.Sequential(
-            nn.Conv2d(3, 16, 3, stride=1, padding=1),
+            nn.Conv2d(3, 64, 4, stride=2, padding=1),
+            nn.BatchNorm2d(64),
             nn.ReLU(True),
-            nn.MaxPool2d(2, stride=2),
-            nn.Conv2d(16, 32, 3, stride=1, padding=1),
+            nn.Conv2d(64, 128, 4, stride=2, padding=1),
+            nn.BatchNorm2d(128),
             nn.ReLU(True),
-            nn.MaxPool2d(2, stride=2)
+            nn.Conv2d(128, 128, 4, stride=2, padding=1),
+            nn.BatchNorm2d(128),
+            nn.ReLU(True),
+            nn.Conv2d(128, 256, 4, stride=2, padding=1),
+            nn.BatchNorm2d(256),
+        )
+
+        self.target_fc = nn.Sequential(
+            nn.Linear(self.target_size[0] * self.target_size[1] // 256 * 256, self.fc_dims)
         )
 
         self.decoder = nn.Sequential(
-            nn.ConvTranspose2d(32, 16, 4, stride=2, padding=1),
+            nn.ConvTranspose2d(256, 256, 4, stride=2, padding=1),
+            nn.BatchNorm2d(256),
             nn.ReLU(True),
-            nn.ConvTranspose2d(16, 3, 4, stride=2, padding=1),
+            nn.ConvTranspose2d(256, 128, 4, stride=2, padding=1),
+            nn.BatchNorm2d(128),
+            nn.ReLU(True),
+            nn.ConvTranspose2d(128, 64, 4, stride=2, padding=1),
+            nn.BatchNorm2d(64),
+            nn.ReLU(True),
+            nn.ConvTranspose2d(64, 3, 4, stride=2, padding=1),
+            nn.BatchNorm2d(3),
+            nn.ReLU(True),
             nn.Sigmoid()
         )
 
-    def forward(self, target):
-        # face = self.face_encoder(face)
+        self.output_fc = nn.Sequential(
+            nn.Linear(self.fc_dims * 2, self.output_size[0] * self.output_size[1] // 256 * 256)
+        )
+
+    def forward(self, face, target):
+        face = self.face_encoder(face)
+        face = face.view(face.size(0), -1)
+        face = self.face_fc(face)
+
         target = self.target_encoder(target)
-        # x = torch.cat([face, target], 1)
-        x = self.decoder(target)
+        target = target.view(target.size(0), -1)
+        target = self.target_fc(target)
+        
+        x = torch.cat([face, target], 1)
+        x = self.output_fc(x)
+        x = x.view(x.size(0), -1, self.output_size[0] // 16, self.output_size[1] // 16)
+        x = self.decoder(x)
         return x
 
 class FaceNet(nn.Module):

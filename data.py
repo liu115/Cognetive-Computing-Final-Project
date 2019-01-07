@@ -24,6 +24,7 @@ class FruitDataset(Dataset):
                 self.img_paths.append(os.path.join(img_dir, fruit_dir, img_name))
     def __getitem__(self, index):
         img = Image.open(self.img_paths[index])
+        img = img.resize((128, 128), Image.BILINEAR)
         if self.transform:
             img = self.transform(img)
         return img
