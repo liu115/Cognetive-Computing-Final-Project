@@ -6,6 +6,7 @@ import torchvision
 import matplotlib.pyplot as plt
 import os
 import time
+import random
 
 from model import AutoEncoder, FaceNet, triplet_loss
 from data import CelebaDataset
@@ -52,10 +53,10 @@ optimizer = torch.optim.Adam(
 
 
 def test():
-
-    
+    start_time = time.time()
     embeddings = []
     for batch_idx, imgs in enumerate(test_loader):
+        imgs = torch.cat(imgs, dim=0)
         imgs = imgs.cuda()
         output = model(imgs)
         embeddings.append(output.detach().cpu())
@@ -82,15 +83,16 @@ def test():
             ix = random.randrange(sample_embeddings[i].shape[0])
             jx = random.randrange(sample_embeddings[j].shape[0])
 
-            inter_class_dist += np.linalg.norm(sample_embeddings[i][ix] - smaple_embeddings[j][jx])
+            inter_class_dist += np.linalg.norm(sample_embeddings[i][ix] - sample_embeddings[j][jx])
             num_pairs += 1
     inter_class_dist /= (1. * num_pairs)
-
+    
+    took = time.time() - start_time
+    print('intra:{:.5f}, inter:{:.5f}, took:{:.1f}s'.format(intra_class_dist, inter_class_dist, took))
 
 def train():
     if not os.path.exists(OUTPUT_DIR):
         os.makedirs(OUTPUT_DIR)
-
     start_time = time.time()
     for epoch in range(num_epochs):
         for batch_idx, (anchor_img, pos_img, neg_img) in enumerate(train_loader):
@@ -113,7 +115,6 @@ def train():
                 took = time.time() - start_time
                 print('epoch [{}/{}], loss:{:.4f}, took: {:.1f}s'.format(epoch, num_epochs, loss.item(), took))
                 start_time = time.time()
-
         torch.save({
             'epoch': epoch + 1,
             'state_dict': model.state_dict(),
@@ -121,9 +122,10 @@ def train():
         },
             os.path.join(OUTPUT_DIR, 'checkpoint_{}.pth'.format(epoch))
         )
+        test()
         
     #for i in range (10):
     #    img = output[i].permute(1, 2, 0)
     #    plt.imshow(img.detach().cpu())
     #    plt.savefig('output/{}_{}.png'.format(epoch, i))
-
+train()

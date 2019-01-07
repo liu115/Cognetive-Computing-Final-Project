@@ -117,9 +117,7 @@ test_dataset = CelebaDataset(
 print(len(train_dataset))
 print(len(test_dataset))
 
-a = test_dataset.__getitem__(0)
-print(len(a))
-print(torch.stack(a).size())
+# a = test_dataset.__getitem__(0)
 # a = a.permute(1, 2, 0)
 # b = b.permute(1, 2, 0)
 # c = c.permute(1, 2, 0)
